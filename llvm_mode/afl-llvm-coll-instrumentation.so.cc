@@ -37,11 +37,13 @@
 
 #define ENABLE_TRYY 1
 #define ENABLE_ROR 1
+#define align(h) (h & (-1<<6))
 
 using namespace llvm;
 using namespace std;
 using xyz = std::array<int, 3>;
 using cur_pre = std::array<uint32_t, 2>;
+using usedcur_pre = std::array<uint32_t, 2>;
 
 namespace {
 
@@ -102,6 +104,8 @@ protected:
   map<cur_pre, uint32_t> fhashMap;
   map<uint32_t, uint32_t> fsingleMap;
 
+  map<usedcur_pre, uint32_t> usedHash;// first vector size is 2. Given two BBId, map to their edge hash
+
   bool disjoint(set<uint32_t>& tmpHashSet, set<uint32_t>& idHashSet)  {
     // We can do this because C++ set class is based on RB tree and thus elements are ordered.
     set<uint32_t>::iterator it = tmpHashSet.begin();
@@ -130,6 +134,7 @@ protected:
         fmulMap.clear();
         solvBBs.clear();
         unsolvBBs.clear();
+        usedHash.clear();
         for (auto BB : multiBBs) {
           bool solved = false;
           // search parameters for BB
@@ -144,6 +149,10 @@ protected:
 #else
                 auto edgeHash = (BBIdMap[prevBB] >> y) ^ (cur_loc >> x) + z;
 #endif
+
+                auto prev_loc = BBIdMap[prevBB];
+                usedHash[usedcur_pre({cur_loc, prev_loc})] = edgeHash;
+
                 tmpHashSet.insert(edgeHash);
               }
               // find a solution for BB if no collision
@@ -227,6 +236,9 @@ protected:
           //errs() << idHashSet.size() << '\n';
           if (!idHashSet.count(i)) {
             fhashMap[cur_pre({cur_loc, prev_loc})] = i;
+
+            usedHash[usedcur_pre({cur_loc, prev_loc})] = i;
+
             idHashSet.insert(i);
             ok = true;
             break;
@@ -242,9 +254,78 @@ protected:
   /* build the hash table for blocks with single precedent */
   void calcSingle() {
     fsingleMap.clear();
+    // int test = 0;
     for (auto BB : singleBBs) {
       auto cur_loc = BBIdMap[BB];
-        bool ok = false;
+      bool ok = false;
+      int i = 0;
+      // test++;
+      // if(test==5){
+      //   break;
+      // }
+      
+      auto prevBB = predMap[BB][0];  //heuristic: get the first prevBB. random??
+      auto prev_loc = BBIdMap[prevBB];
+      // errs() << "prevBB: " << prevBB << '\n';
+      if(prevBB->hasNPredecessors(0)){  // starting BB doesn't have predecessor
+        errs() << "This should happen only once" << '\n';
+        for (i = 0; i < MAP_SIZE; i++) {
+          if (!idHashSet.count(i)) {
+            fsingleMap[cur_loc] = i;  //assign hash to 1-->2(see below). Without this make will fail
+            idHashSet.insert(i);
+            usedHash[usedcur_pre({cur_loc, prev_loc})] = i;
+            ok = true;
+            break;
+          }
+        }
+        printf("%ld with hash %ld\n", cur_loc, i);
+        continue;                      // 1--->2--->3--->4
+      }                                //             +->5
+                                       // BB:2 prevBB:1, prevprevBB is NULL
+      // errs() << "prevBB size: " << predMap[BB].size() << '\n';
+      // errs() << "prevprevBB size: " << predMap[prevBB].size() << '\n';
+
+      // for (const auto &pred : predecessors(prevBB)){
+      //   errs() << "prevprevBB: " << pred << '\n';
+      // }
+      
+
+      auto prevprevBB = predMap[prevBB][0];
+      auto prev_prev_loc = BBIdMap[prevprevBB];
+
+      uint32_t basehash;
+
+      if (usedHash.count(usedcur_pre{prev_loc, prev_prev_loc}))
+      {
+        basehash = usedHash[usedcur_pre({prev_loc, prev_prev_loc})];
+      }
+      else
+      {
+        errs() << "===used hash doesn't exists !!!===" << '\n';
+      }
+      
+
+
+      // printf("basehash: %ld\n", basehash);
+      // printf("aligned %ld\n", align(basehash));
+      printf("===processing %ld\n", cur_loc);
+      for (i = align(basehash); i < align(basehash) + 63; i++)
+      {
+        // for (set<uint32_t>::iterator it = idHashSet.begin(); it != idHashSet.end(); ++it){
+        //   printf("%d\n", *it);
+        // }  //debug print idHashSet
+        if(!idHashSet.count(i)){
+          printf("decide to assign %ld\n", i);
+          fsingleMap[cur_loc] = i;
+          idHashSet.insert(i);
+          usedHash[usedcur_pre({cur_loc, prev_loc})] = i; //add newly assigned singleBB hash to used
+          ok = true;
+          break;
+        }
+      }
+      // printf("===%ld with hash %ld\n", cur_loc, i);
+
+      if(!ok){
         for (int i = 0; i < MAP_SIZE; i++) {
           if (!idHashSet.count(i)) {
             fsingleMap[cur_loc] = i;
@@ -253,10 +334,23 @@ protected:
             break;
           }
         }
-        if (!ok) {
-          errs() << "calcSingle failed because of bitmap capacity." << '\n';
-          exit(2);
-        }
+      }
+
+
+      // old fsingle Algorithm
+      // for (int i = 0; i < MAP_SIZE; i++) {
+      //   if (!idHashSet.count(i)) {
+      //     fsingleMap[cur_loc] = i;
+      //     idHashSet.insert(i);
+      //     ok = true;
+      //     break;
+      //   }
+      // }
+
+      if (!ok) {
+        errs() << "calcSingle failed because of bitmap capacity." << '\n';
+        exit(2);
+      }
     }
   }
 };
