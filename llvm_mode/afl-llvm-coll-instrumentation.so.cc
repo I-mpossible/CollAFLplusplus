@@ -325,7 +325,7 @@ protected:
       }
       // printf("===%ld with hash %ld\n", cur_loc, i);
 
-      if(!ok){
+      if(!ok){  //if not found, assign the lowest available hash
         for (int i = 0; i < MAP_SIZE; i++) {
           if (!idHashSet.count(i)) {
             fsingleMap[cur_loc] = i;
@@ -334,6 +334,7 @@ protected:
             break;
           }
         }
+        //TODO count how many BBs fall into this category
       }
 
 
