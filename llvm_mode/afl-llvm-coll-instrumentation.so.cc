@@ -33,6 +33,10 @@
 #include "llvm/Pass.h"
 #include "llvm/IR/Constants.h"
 
+#include "llvm/Support/JSON.h"
+// #include "llvm/Support/CFG.h"
+
+
 #include "afl-llvm-common.h"
 
 #define ENABLE_TRYY 1
@@ -151,7 +155,7 @@ protected:
 #endif
 
                 auto prev_loc = BBIdMap[prevBB];
-                usedHash[usedcur_pre({cur_loc, prev_loc})] = edgeHash;
+                usedHash[usedcur_pre({prev_loc, cur_loc})] = edgeHash;
 
                 tmpHashSet.insert(edgeHash);
               }
@@ -237,7 +241,7 @@ protected:
           if (!idHashSet.count(i)) {
             fhashMap[cur_pre({cur_loc, prev_loc})] = i;
 
-            usedHash[usedcur_pre({cur_loc, prev_loc})] = i;
+            usedHash[usedcur_pre({prev_loc, cur_loc})] = i;
 
             idHashSet.insert(i);
             ok = true;
@@ -259,6 +263,8 @@ protected:
       auto cur_loc = BBIdMap[BB];
       bool ok = false;
       int i = 0;
+
+
       // test++;
       // if(test==5){
       //   break;
@@ -273,7 +279,7 @@ protected:
           if (!idHashSet.count(i)) {
             fsingleMap[cur_loc] = i;  //assign hash to 1-->2(see below). Without this make will fail
             idHashSet.insert(i);
-            usedHash[usedcur_pre({cur_loc, prev_loc})] = i;
+            usedHash[usedcur_pre({prev_loc, cur_loc})] = i;
             ok = true;
             break;
           }
@@ -289,15 +295,24 @@ protected:
       //   errs() << "prevprevBB: " << pred << '\n';
       // }
       
+      int test_count = 0;
+      for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI){
+        ++test_count;
+      }
+
+      printf("===processing %ld\n", cur_loc);
+      printf("===%ld has %d predecessor\n", cur_loc, test_count);
+      printf("===%ld predecessor id %ld\n", cur_loc, prev_loc);
+
 
       auto prevprevBB = predMap[prevBB][0];
       auto prev_prev_loc = BBIdMap[prevprevBB];
 
-      uint32_t basehash;
+      uint32_t basehash = 0;
 
-      if (usedHash.count(usedcur_pre{prev_loc, prev_prev_loc}))
+      if (usedHash.count(usedcur_pre{prev_prev_loc, prev_loc}))
       {
-        basehash = usedHash[usedcur_pre({prev_loc, prev_prev_loc})];
+        basehash = usedHash[usedcur_pre({prev_prev_loc, prev_loc})];
       }
       else
       {
@@ -308,7 +323,7 @@ protected:
 
       // printf("basehash: %ld\n", basehash);
       // printf("aligned %ld\n", align(basehash));
-      printf("===processing %ld\n", cur_loc);
+      
       for (i = align(basehash); i < align(basehash) + 63; i++)
       {
         // for (set<uint32_t>::iterator it = idHashSet.begin(); it != idHashSet.end(); ++it){
@@ -318,7 +333,7 @@ protected:
           printf("decide to assign %ld\n", i);
           fsingleMap[cur_loc] = i;
           idHashSet.insert(i);
-          usedHash[usedcur_pre({cur_loc, prev_loc})] = i; //add newly assigned singleBB hash to used
+          usedHash[usedcur_pre({prev_loc, cur_loc})] = i; //add newly assigned singleBB hash to used
           ok = true;
           break;
         }
@@ -328,8 +343,10 @@ protected:
       if(!ok){  //if not found, assign the lowest available hash
         for (int i = 0; i < MAP_SIZE; i++) {
           if (!idHashSet.count(i)) {
+            printf("decide to assign random %ld\n", i);
             fsingleMap[cur_loc] = i;
             idHashSet.insert(i);
+            usedHash[usedcur_pre({prev_loc, cur_loc})] = i;
             ok = true;
             break;
           }
@@ -622,6 +639,31 @@ bool AFLLTOPass::runOnModule(Module &M) {
       }
     }
   }
+
+  // generate hash map file
+  std::string hashfileName = "hashdump.json";
+  std::error_code err;
+  raw_fd_ostream os(hashfileName, err);
+  if (os.has_error()) {
+    errs() << "open hash file failed" << '\n';
+  }
+  llvm::json::OStream J(os);
+  J.array([&]() {
+    for (map<usedcur_pre, uint32_t>::iterator it = usedHash.begin(); it != usedHash.end(); ++it){
+      J.object([&](){
+        J.attribute("from", static_cast<uint32_t>((it->first)[0]));
+        J.attribute("to",   static_cast<uint32_t>((it->first)[1]));
+        J.attribute("hash", static_cast<uint32_t>(it->second));
+      });
+    }
+  });
+
+  
+  // for (map<usedcur_pre, uint32_t>::iterator it = usedHash.begin(); it != usedHash.end(); ++it){
+    
+  //   sprintf()
+  //   printf("%d\n", (it->first));
+  // }
 
   /* Say something nice. */
   if (!be_quiet) {
