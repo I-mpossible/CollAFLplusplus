@@ -34,6 +34,7 @@
 #include "llvm/IR/Constants.h"
 
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/raw_ostream.h"
 // #include "llvm/Support/CFG.h"
 
 
@@ -100,7 +101,7 @@ protected:
 
   set<uint32_t> idHashSet, tmpHashSet;
 
-  vector<BasicBlock *> singleBBs, multiBBs, solvBBs, unsolvBBs;
+  vector<BasicBlock *> singleBBs, multiBBs, solvBBs, unsolvBBs, seqBBs, nonSeqBBs;
   map<BasicBlock *, vector< BasicBlock* > > predMap;
   map<BasicBlock *, uint32_t> BBIdMap;
 
@@ -280,6 +281,8 @@ protected:
             fsingleMap[cur_loc] = i;  //assign hash to 1-->2(see below). Without this make will fail
             idHashSet.insert(i);
             usedHash[usedcur_pre({prev_loc, cur_loc})] = i;
+
+            nonSeqBBs.push_back(BB);
             ok = true;
             break;
           }
@@ -335,6 +338,8 @@ protected:
           idHashSet.insert(i);
           usedHash[usedcur_pre({prev_loc, cur_loc})] = i; //add newly assigned singleBB hash to used
           ok = true;
+
+          seqBBs.push_back(BB);
           break;
         }
       }
@@ -348,6 +353,8 @@ protected:
             idHashSet.insert(i);
             usedHash[usedcur_pre({prev_loc, cur_loc})] = i;
             ok = true;
+             
+            nonSeqBBs.push_back(BB);
             break;
           }
         }
@@ -371,6 +378,46 @@ protected:
       }
     }
   }
+
+  void dumpJsonEdge (llvm::json::OStream& J, vector<BasicBlock *>& BBs) {
+    for (auto BB : BBs) {
+      J.object([&](){
+        J.attribute("id", BBIdMap[BB]);
+        // Print to get string representation of BB
+        std::string insns;
+        raw_string_ostream(insns) << *BB;
+        J.attribute("insns", insns);
+      });
+    }
+  }
+
+  void dumpJson() {
+      // generate hash map file
+      std::string hashfileName = "hashdump.json";
+      std::error_code err;
+      raw_fd_ostream os(hashfileName, err);
+      if (os.has_error()) {
+        errs() << "open hash file failed" << '\n';
+      }
+      llvm::json::OStream J(os);
+      J.object([&](){
+          J.attributeArray("seqBBs",    [&]() {dumpJsonEdge(J, seqBBs);});
+          J.attributeArray("nonSeqBBs", [&]() {dumpJsonEdge(J, nonSeqBBs);});
+          J.attributeArray("solvBBs",   [&]() {dumpJsonEdge(J, solvBBs);});
+          J.attributeArray("unsolvBBs", [&]() {dumpJsonEdge(J, unsolvBBs);});
+          J.attributeArray("edges", [&]() {
+            for (map<usedcur_pre, uint32_t>::iterator it = usedHash.begin(); it != usedHash.end(); ++it){
+              J.object([&](){
+                J.attribute("from", static_cast<uint32_t>((it->first)[0]));
+                J.attribute("to",   static_cast<uint32_t>((it->first)[1]));
+                J.attribute("hash", static_cast<uint32_t>(it->second));
+              });
+            }
+          });
+      });
+
+  }
+
 };
 }// namespace
 
@@ -444,6 +491,8 @@ bool AFLLTOPass::runOnModule(Module &M) {
   errs() << "predMap size: " << predMap.size() << '\n';
 
   errs() << "fsingleMap size: " << fsingleMap.size() << '\n';
+  errs() << "\tseqBBs size: " << seqBBs.size() << '\n';
+  errs() << "\tnonSeqBBs size: " << nonSeqBBs.size() << '\n';
   errs() << "fmulMap size: " << fmulMap.size() << '\n';
   errs() << "\tsolvBBs size: " << solvBBs.size() << '\n';
   errs() << "\tunsolvBBs size: " << unsolvBBs.size() << '\n';
@@ -640,24 +689,7 @@ bool AFLLTOPass::runOnModule(Module &M) {
     }
   }
 
-  // generate hash map file
-  std::string hashfileName = "hashdump.json";
-  std::error_code err;
-  raw_fd_ostream os(hashfileName, err);
-  if (os.has_error()) {
-    errs() << "open hash file failed" << '\n';
-  }
-  llvm::json::OStream J(os);
-  J.array([&]() {
-    for (map<usedcur_pre, uint32_t>::iterator it = usedHash.begin(); it != usedHash.end(); ++it){
-      J.object([&](){
-        J.attribute("from", static_cast<uint32_t>((it->first)[0]));
-        J.attribute("to",   static_cast<uint32_t>((it->first)[1]));
-        J.attribute("hash", static_cast<uint32_t>(it->second));
-      });
-    }
-  });
-
+  dumpJson();
   
   // for (map<usedcur_pre, uint32_t>::iterator it = usedHash.begin(); it != usedHash.end(); ++it){
     
