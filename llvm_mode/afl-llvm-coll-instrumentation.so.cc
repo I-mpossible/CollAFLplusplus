@@ -183,7 +183,7 @@ protected:
         min = cur;
         Y = y;
       }
-      errs() << "trying y: " << y << " solved: " << sizeofSolv << " unsolved: " << sizeofUnsolv << '\n';
+      //errs() << "trying y: " << y << " solved: " << sizeofSolv << " unsolved: " << sizeofUnsolv << '\n';
       if(min == 0)
         break;
     }
@@ -275,7 +275,7 @@ protected:
       auto prev_loc = BBIdMap[prevBB];
       // errs() << "prevBB: " << prevBB << '\n';
       if(prevBB->hasNPredecessors(0)){  // starting BB doesn't have predecessor
-        errs() << "This should happen only once" << '\n';
+        //errs() << "This should happen only once" << '\n';
         for (i = 0; i < MAP_SIZE; i++) {
           if (!idHashSet.count(i)) {
             fsingleMap[cur_loc] = i;  //assign hash to 1-->2(see below). Without this make will fail
@@ -287,7 +287,7 @@ protected:
             break;
           }
         }
-        printf("%ld with hash %ld\n", cur_loc, i);
+        //printf("%ld with hash %ld\n", cur_loc, i);
         continue;                      // 1--->2--->3--->4
       }                                //             +->5
                                        // BB:2 prevBB:1, prevprevBB is NULL
@@ -303,9 +303,9 @@ protected:
         ++test_count;
       }
 
-      printf("===processing %ld\n", cur_loc);
-      printf("===%ld has %d predecessor\n", cur_loc, test_count);
-      printf("===%ld predecessor id %ld\n", cur_loc, prev_loc);
+      //printf("===processing %ld\n", cur_loc);
+      //printf("===%ld has %d predecessor\n", cur_loc, test_count);
+      //printf("===%ld predecessor id %ld\n", cur_loc, prev_loc);
 
 
       auto prevprevBB = predMap[prevBB][0];
@@ -333,7 +333,7 @@ protected:
         //   printf("%d\n", *it);
         // }  //debug print idHashSet
         if(!idHashSet.count(i)){
-          printf("decide to assign %ld\n", i);
+          //printf("decide to assign %ld\n", i);
           fsingleMap[cur_loc] = i;
           idHashSet.insert(i);
           usedHash[usedcur_pre({prev_loc, cur_loc})] = i; //add newly assigned singleBB hash to used
@@ -348,7 +348,7 @@ protected:
       if(!ok){  //if not found, assign the lowest available hash
         for (int i = 0; i < MAP_SIZE; i++) {
           if (!idHashSet.count(i)) {
-            printf("decide to assign random %ld\n", i);
+            //printf("decide to assign random %ld\n", i);
             fsingleMap[cur_loc] = i;
             idHashSet.insert(i);
             usedHash[usedcur_pre({prev_loc, cur_loc})] = i;
@@ -393,7 +393,10 @@ protected:
 
   void dumpJson() {
       // generate hash map file
-      std::string hashfileName = "hashdump.json";
+      errs() << "Module name: " << BBIdMap.begin()->first->getModule()->getName() << "\n";
+      const std::string hashfileName = "hashdump.json";
+      // delete old copy
+      remove(hashfileName.c_str());
       std::error_code err;
       raw_fd_ostream os(hashfileName, err);
       if (os.has_error()) {
@@ -471,6 +474,11 @@ bool AFLLTOPass::runOnModule(Module &M) {
       }
       else {
         multiBBs.push_back(BB);
+        // printf("========\n");
+        // errs() << "BB: " << BB << '\n';
+        for (const auto &pred : predecessors(BB)){
+          // errs() << "pred: " << pred << '\n';
+        }
       }
       for (const auto &pred : predecessors(BB)){
         predMap[BB].push_back(pred);
@@ -578,7 +586,7 @@ bool AFLLTOPass::runOnModule(Module &M) {
         continue;
       }
       else {
-        if(fmulMap.count(BB)) {
+        if(fmulMap.count(BB)) {  //should be fhashMap??
           continue;
         }
         else {
