@@ -183,7 +183,7 @@ protected:
         min = cur;
         Y = y;
       }
-      //errs() << "trying y: " << y << " solved: " << sizeofSolv << " unsolved: " << sizeofUnsolv << '\n';
+      errs() << "trying y: " << y << " solved: " << sizeofSolv << " unsolved: " << sizeofUnsolv << '\n';
       if(min == 0)
         break;
     }
@@ -374,7 +374,7 @@ protected:
 
       if (!ok) {
         errs() << "calcSingle failed because of bitmap capacity." << '\n';
-        exit(2);
+        //exit(2);
       }
     }
   }
@@ -384,16 +384,16 @@ protected:
       J.object([&](){
         J.attribute("id", BBIdMap[BB]);
         // Print to get string representation of BB
-        std::string insns;
-        raw_string_ostream(insns) << *BB;
-        J.attribute("insns", insns);
+        //std::string insns;
+        //raw_string_ostream(insns) << *BB;
+        //J.attribute("insns", insns);
       });
     }
   }
 
   void dumpJson() {
       // generate hash map file
-      errs() << "Module name: " << BBIdMap.begin()->first->getModule()->getName() << "\n";
+      //errs() << "Module name: " << BBIdMap.begin()->first->getModule()->getName() << "\n";
       const std::string hashfileName = "hashdump.json";
       // delete old copy
       remove(hashfileName.c_str());
@@ -476,9 +476,9 @@ bool AFLLTOPass::runOnModule(Module &M) {
         multiBBs.push_back(BB);
         // printf("========\n");
         // errs() << "BB: " << BB << '\n';
-        for (const auto &pred : predecessors(BB)){
+        // for (const auto &pred : predecessors(BB)){
           // errs() << "pred: " << pred << '\n';
-        }
+        // }
       }
       for (const auto &pred : predecessors(BB)){
         predMap[BB].push_back(pred);
@@ -492,6 +492,7 @@ bool AFLLTOPass::runOnModule(Module &M) {
   }
   errs() << "singleBBs size: " << singleBBs.size() << '\n';
   errs() << "multiBBs size: " << multiBBs.size() << '\n';
+  errs() << "MAP SIZE: " << MAP_SIZE << '\n';
   int Y = calcFmul();
   calcFhash();
   calcSingle();
@@ -508,7 +509,7 @@ bool AFLLTOPass::runOnModule(Module &M) {
 
   auto totalAtMost = fsingleMap.size() + fmulMap.size() + fhashMap.size();
   errs() << "Total edges instrumented at most: fsingleMap size + fmulMap size + fhashMap size == " <<  totalAtMost  << '\n';
-
+  errs() << "===Cache friendly instrumentation===" << '\n';
   for (auto &F : M) {
     if (isIgnoreFunction(&F))
       continue;
