@@ -40,7 +40,7 @@
 
 #include "afl-llvm-common.h"
 
-#define ENABLE_TRYY 0
+#define ENABLE_TRYY 1
 #define ENABLE_ROR 1
 #define align(h) (h & (-1<<6))
 
